@@ -144,14 +144,28 @@ def save_debug_image(img, config, filename="debug.png"):
 
 
 def is_game_over(img):
-    """게임 오버 오버레이(Play Again 화면) 감지."""
+    """
+    게임 오버 감지: 빨간 'Score' 텍스트(상단 중앙) +
+    초록 'Play Again' 버튼(하단 중앙)이 동시에 존재하면 게임 오버.
+    """
     h, w = img.shape[:2]
-    cy1, cy2 = int(h * 0.35), int(h * 0.65)
-    cx1, cx2 = int(w * 0.25), int(w * 0.75)
-    center = img[cy1:cy2, cx1:cx2]
-    hsv = cv2.cvtColor(center, cv2.COLOR_BGR2HSV)
-    bright_low_sat = np.mean((hsv[:, :, 1] < 30) & (hsv[:, :, 2] > 180))
-    return bool(bright_low_sat > 0.3)
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+    # 초록 버튼 영역 (세로 62~88%, 가로 28~72%)
+    btn = hsv[int(h * 0.62):int(h * 0.88), int(w * 0.28):int(w * 0.72)]
+    green_ratio = float(np.mean(
+        (btn[:, :, 0] >= 38) & (btn[:, :, 0] <= 88) &
+        (btn[:, :, 1] > 60) & (btn[:, :, 2] > 80)
+    ))
+
+    # 빨간 Score 텍스트 영역 (세로 5~38%, 가로 28~72%)
+    score = hsv[int(h * 0.05):int(h * 0.38), int(w * 0.28):int(w * 0.72)]
+    red_ratio = float(np.mean(
+        ((score[:, :, 0] < 12) | (score[:, :, 0] > 168)) &
+        (score[:, :, 1] > 130) & (score[:, :, 2] > 130)
+    ))
+
+    return green_ratio > 0.06 and red_ratio > 0.03
 
 
 def print_board(board):
