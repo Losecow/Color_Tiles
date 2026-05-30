@@ -116,7 +116,12 @@ def run():
             # 보드가 실제로 바뀔 때까지 대기 (팬텀 클릭 방지)
             for _ in range(BOARD_WAIT_MAX):
                 img, board = get_frame_and_board(config)
-                if tile_count(board) != prev_tile_count or is_game_over(img):
+                if is_game_over(img):
+                    break
+                if tile_count(board) != prev_tile_count:
+                    # 변화 감지 → 애니메이션 완전 종료까지 추가 대기
+                    time.sleep(0.25)
+                    img, board = get_frame_and_board(config)
                     break
                 time.sleep(BOARD_WAIT_STEP)
 
