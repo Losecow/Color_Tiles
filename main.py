@@ -29,25 +29,27 @@ def save_config(config):
         json.dump(config, f, indent=2)
 
 
-def ensure_config():
-    """bbox가 미설정(0,0,0,0)이면 자동 감지 후 저장"""
+def fresh_config():
+    """매 실행마다 bbox 재감지 + 팔레트 재학습 (보드가 매 판 새로 생성되므로)"""
     config = load_config()
-    bbox = config["bbox"]
-    if bbox["x1"] == 0 and bbox["x2"] == 0:
-        print("게임 보드 자동 감지 중...")
-        detected = auto_detect_board()
-        if detected is None:
-            raise RuntimeError("게임 보드를 찾지 못했습니다. 게임이 화면에 표시된 상태인지 확인하세요.")
-        config["bbox"] = detected
-        img = capture(detected)
-        config["palette"] = learn_palette(img, ROWS, COLS)
-        save_config(config)
-        print(f"  감지 완료: {detected}")
+
+    print("게임 보드 자동 감지 중...")
+    detected = auto_detect_board()
+    if detected is None:
+        raise RuntimeError("게임 보드를 찾지 못했습니다. 게임이 화면에 표시된 상태인지 확인하세요.")
+    config["bbox"] = detected
+    print(f"  bbox: {detected}")
+
+    img = capture(detected)
+    config["palette"] = learn_palette(img, ROWS, COLS)
+    print(f"  팔레트: {len(config['palette'])}색 학습 완료")
+
+    save_config(config)
     return config
 
 
 def run():
-    config = ensure_config()
+    config = fresh_config()
     bbox = config["bbox"]
     rows, cols = config["rows"], config["cols"]
     scale_x = config.get("scale_x", 1.0)

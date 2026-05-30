@@ -26,32 +26,54 @@ def full_screenshot():
         return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR), mon
 
 
-def auto_detect_board(padding=6):
+def auto_detect_board(rows=ROWS, cols=COLS, padding=6):
     """
     전체 화면에서 게임 보드 bbox 자동 감지.
-    채도 높은(타일) 픽셀 밀집 영역의 최대 연결 컴포넌트를 찾는다.
+    - 터미널 텍스트 등 작은 블롭(< 500px²) 제거 후 타일 군집화
+    - cols/rows 비율(17:10=1.7)에 가장 가까운 영역을 게임판으로 선택
     반환: {"x1","y1","x2","y2"} (물리 픽셀 기준) 또는 None
     """
+    target_ratio = cols / rows  # 1.7
+
     img, _ = full_screenshot()
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     sat_mask = (hsv[:, :, 1] > 50).astype(np.uint8)
 
-    # 타일들을 이어붙여 보드 영역으로 만들기
-    kernel = np.ones((25, 25), np.uint8)
-    dilated = cv2.dilate(sat_mask, kernel, iterations=2)
+    # 터미널 텍스트 등 소형 블롭 제거 (타일 최소 면적 500px²)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(sat_mask)
+    filtered = np.zeros_like(sat_mask)
+    for i in range(1, n):
+        if int(stats[i, cv2.CC_STAT_AREA]) >= 500:
+            filtered[labels == i] = 1
 
-    num_labels, _, stats, _ = cv2.connectedComponentsWithStats(dilated)
-    if num_labels < 2:
+    # 인접 타일 연결
+    kernel = np.ones((30, 30), np.uint8)
+    dilated = cv2.dilate(filtered, kernel, iterations=2)
+
+    n2, _, st2, _ = cv2.connectedComponentsWithStats(dilated)
+    if n2 < 2:
         return None
 
-    # 배경(0) 제외하고 가장 큰 영역
-    areas = stats[1:, cv2.CC_STAT_AREA]
-    largest = int(np.argmax(areas)) + 1
-    x = int(stats[largest, cv2.CC_STAT_LEFT])
-    y = int(stats[largest, cv2.CC_STAT_TOP])
-    w = int(stats[largest, cv2.CC_STAT_WIDTH])
-    h = int(stats[largest, cv2.CC_STAT_HEIGHT])
+    # 넓이 × (비율 오차 패널티) 스코어 — 게임판 비율(17:10)에 가장 가까운 최대 영역 선택
+    best, best_score = None, -1
+    for i in range(1, n2):
+        x = int(st2[i, cv2.CC_STAT_LEFT])
+        y = int(st2[i, cv2.CC_STAT_TOP])
+        w = int(st2[i, cv2.CC_STAT_WIDTH])
+        h = int(st2[i, cv2.CC_STAT_HEIGHT])
+        area = int(st2[i, cv2.CC_STAT_AREA])
+        if w < 200 or h < 100:
+            continue
+        ratio_err = abs(w / h - target_ratio)
+        score = area / (1 + ratio_err * 10)
+        if score > best_score:
+            best_score = score
+            best = (x, y, w, h)
 
+    if best is None:
+        return None
+
+    x, y, w, h = best
     return {
         "x1": max(0, x - padding),
         "y1": max(0, y - padding),
