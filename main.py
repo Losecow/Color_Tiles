@@ -104,6 +104,8 @@ def run():
             print(f"  [{elapsed:5.1f}s] 클릭 ({r:2d},{c:2d}) +{gained:2d}점 → 누적 {score:3d}점"
                   f" | 잔여 {tile_count(board) - gained}개")
 
+            sx, sy = __import__('control').cell_to_screen(bbox, rows, cols, r, c, scale_x, scale_y)
+            print(f"         → 화면 좌표 ({sx}, {sy}) 클릭")
             click_cell(bbox, rows, cols, r, c, scale_x, scale_y)
             clicks += 1
             time.sleep(CLICK_DELAY)

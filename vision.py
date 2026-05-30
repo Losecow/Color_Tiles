@@ -46,10 +46,23 @@ def nearest_color_id(bgr, palette):
     return int(np.argmin(dists))
 
 
-def bgr_saturation(bgr):
+def bgr_hsv(bgr):
     pixel = np.uint8([[bgr]])
-    hsv = cv2.cvtColor(pixel, cv2.COLOR_BGR2HSV)[0][0]
-    return int(hsv[1])
+    return cv2.cvtColor(pixel, cv2.COLOR_BGR2HSV)[0][0]  # h, s, v
+
+
+def bgr_saturation(bgr):
+    return int(bgr_hsv(bgr)[1])
+
+
+def is_background(bgr):
+    """
+    배경(빈칸 체크무늬) 판정.
+    채도 낮고(S<40) 밝기도 높은(V>205) 경우만 배경으로 본다.
+    gray 타일은 채도 낮아도 밝기가 낮으므로 타일로 처리.
+    """
+    h, s, v = bgr_hsv(bgr)
+    return int(s) < BG_SAT_THRESHOLD and int(v) > 205
 
 
 def learn_palette(img, rows=ROWS, cols=COLS, n_clusters=12):
@@ -61,7 +74,7 @@ def learn_palette(img, rows=ROWS, cols=COLS, n_clusters=12):
     for r in range(rows):
         for c in range(cols):
             bgr = cell_mean_bgr(img, r, c, rows, cols)
-            if bgr_saturation(bgr) >= 50:
+            if not is_background(bgr):   # 배경 제외, gray 타일 포함
                 tile_samples.append(bgr)
 
     if len(tile_samples) < n_clusters:
@@ -84,7 +97,7 @@ def recognize_board(img, config):
         row = []
         for c in range(cols):
             bgr = cell_mean_bgr(img, r, c, rows, cols)
-            if bgr_saturation(bgr) < BG_SAT_THRESHOLD:
+            if is_background(bgr):
                 row.append(EMPTY)
             else:
                 row.append(nearest_color_id(bgr, palette) + 1)
@@ -117,7 +130,7 @@ def save_debug_image(img, config, filename="debug.png"):
             cy = int((r + 0.5) * cell_h)
             cx = int((c + 0.5) * cell_w)
             bgr = cell_mean_bgr(img, r, c, rows, cols)
-            if bgr_saturation(bgr) < BG_SAT_THRESHOLD:
+            if is_background(bgr):
                 cv2.circle(debug, (cx, cy), 3, (160, 160, 160), -1)
             elif palette:
                 pid = nearest_color_id(bgr, palette)
