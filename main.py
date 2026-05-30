@@ -30,21 +30,28 @@ def save_config(config):
 
 
 def fresh_config():
-    """매 실행마다 bbox 재감지 + 팔레트 재학습 (보드가 매 판 새로 생성되므로)"""
+    """매 실행마다 bbox 재감지 + 팔레트 재학습"""
     config = load_config()
 
-    print("게임 보드 자동 감지 중...")
+    print("5초 안에 터미널을 최소화하고 게임 창을 앞으로 가져오세요!")
+    for i in range(5, 0, -1):
+        print(f"  {i}...", end="\r", flush=True)
+        time.sleep(1)
+    print("게임 보드 감지 중...   ")
+
     detected = auto_detect_board()
     if detected is None:
         raise RuntimeError("게임 보드를 찾지 못했습니다. 게임이 화면에 표시된 상태인지 확인하세요.")
-    config["bbox"] = detected
-    print(f"  bbox: {detected}")
 
+    w = detected["x2"] - detected["x1"]
+    h = detected["y2"] - detected["y1"]
+    print(f"  bbox: {detected}  비율: {w/h:.2f} (목표 1.70)")
+
+    config["bbox"] = detected
     img = capture(detected)
     config["palette"] = learn_palette(img, ROWS, COLS)
     save_debug_image(img, ROWS, COLS, "debug.png")
-    print(f"  팔레트: {len(config['palette'])}색 학습 완료")
-    print(f"  debug.png 저장 — 그리드 정렬 확인 후 진행하세요")
+    print(f"  팔레트: {len(config['palette'])}색 / debug.png 저장됨")
 
     save_config(config)
     return config
@@ -57,9 +64,9 @@ def run():
     scale_x = config.get("scale_x", 1.0)
     scale_y = config.get("scale_y", 1.0)
 
-    print("=== Color Tiles 봇 시작 ===")
-    print(f"설정: {rows}x{cols} 격자 | HiDPI x={scale_x:.2f} y={scale_y:.2f}")
-    print(f"{START_DELAY}초 후 자동 클릭 시작. 중단: Ctrl+C 또는 마우스를 좌상단으로.")
+    print(f"\n=== Color Tiles 봇 시작 ===")
+    print(f"설정: {rows}x{cols} | HiDPI x={scale_x:.2f} y={scale_y:.2f}")
+    print(f"3초 후 클릭 시작. 게임 창을 앞으로 가져오세요. 중단: Ctrl+C")
     time.sleep(START_DELAY)
 
     # 초기 보드 인식
