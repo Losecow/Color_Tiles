@@ -26,59 +26,53 @@ def full_screenshot():
         return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR), mon
 
 
-def auto_detect_board(rows=ROWS, cols=COLS, padding=6):
+def auto_detect_board(rows=ROWS, cols=COLS, padding=4):
     """
     전체 화면에서 게임 보드 bbox 자동 감지.
-    - 터미널 텍스트 등 작은 블롭(< 500px²) 제거 후 타일 군집화
-    - cols/rows 비율(17:10=1.7)에 가장 가까운 영역을 게임판으로 선택
-    반환: {"x1","y1","x2","y2"} (물리 픽셀 기준) 또는 None
+    1) 타일 크기(≥1500px²) 이상 블롭만 유지 → 터미널 텍스트 제거
+    2) 행/열 밀도 투영 → 가장 밀집된 연속 구간을 게임판 경계로 선택
     """
-    target_ratio = cols / rows  # 1.7
-
     img, _ = full_screenshot()
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     sat_mask = (hsv[:, :, 1] > 50).astype(np.uint8)
 
-    # 터미널 텍스트 등 소형 블롭 제거 (타일 최소 면적 500px²)
+    # 터미널 텍스트·소아이콘 제거 (타일 최소 ~32×32px = 1000px²)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(sat_mask)
-    filtered = np.zeros_like(sat_mask)
+    tile_mask = np.zeros_like(sat_mask)
     for i in range(1, n):
-        if int(stats[i, cv2.CC_STAT_AREA]) >= 500:
-            filtered[labels == i] = 1
+        if int(stats[i, cv2.CC_STAT_AREA]) >= 1000:
+            tile_mask[labels == i] = 1
 
-    # 인접 타일 연결
-    kernel = np.ones((30, 30), np.uint8)
-    dilated = cv2.dilate(filtered, kernel, iterations=2)
-
-    n2, _, st2, _ = cv2.connectedComponentsWithStats(dilated)
-    if n2 < 2:
+    if tile_mask.sum() == 0:
         return None
 
-    # 넓이 × (비율 오차 패널티) 스코어 — 게임판 비율(17:10)에 가장 가까운 최대 영역 선택
-    best, best_score = None, -1
-    for i in range(1, n2):
-        x = int(st2[i, cv2.CC_STAT_LEFT])
-        y = int(st2[i, cv2.CC_STAT_TOP])
-        w = int(st2[i, cv2.CC_STAT_WIDTH])
-        h = int(st2[i, cv2.CC_STAT_HEIGHT])
-        area = int(st2[i, cv2.CC_STAT_AREA])
-        if w < 200 or h < 100:
-            continue
-        ratio_err = abs(w / h - target_ratio)
-        score = area / (1 + ratio_err * 10)
-        if score > best_score:
-            best_score = score
-            best = (x, y, w, h)
+    # 행/열 밀도
+    row_dens = tile_mask.mean(axis=1)
+    col_dens = tile_mask.mean(axis=0)
+    thr = max(row_dens.max(), col_dens.max()) * 0.2
 
-    if best is None:
-        return None
+    def largest_run(dens, threshold):
+        """밀도가 threshold 이상인 가장 긴 연속 구간의 (start, end) 반환"""
+        active = np.where(dens > threshold)[0]
+        if len(active) == 0:
+            return 0, 0
+        runs, start, prev = [], active[0], active[0]
+        for idx in active[1:]:
+            if idx - prev > 8:
+                runs.append((start, prev))
+                start = idx
+            prev = idx
+        runs.append((start, prev))
+        return max(runs, key=lambda r: r[1] - r[0])
 
-    x, y, w, h = best
+    y1, y2 = largest_run(row_dens, thr)
+    x1, x2 = largest_run(col_dens, thr)
+
     return {
-        "x1": max(0, x - padding),
-        "y1": max(0, y - padding),
-        "x2": x + w + padding,
-        "y2": y + h + padding,
+        "x1": max(0, int(x1) - padding),
+        "y1": max(0, int(y1) - padding),
+        "x2": int(x2) + padding,
+        "y2": int(y2) + padding,
     }
 
 
