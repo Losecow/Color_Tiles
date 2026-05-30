@@ -152,6 +152,28 @@ def recognize_board(img, config):
     return board
 
 
+def save_debug_image(img, rows, cols, filename="debug.png"):
+    """감지된 그리드를 오버레이한 디버그 이미지 저장"""
+    debug = img.copy()
+    h, w = img.shape[:2]
+    cell_h = h / rows
+    cell_w = w / cols
+
+    for r in range(rows + 1):
+        y = int(r * cell_h)
+        cv2.line(debug, (0, y), (w, y), (0, 255, 0), 1)
+    for c in range(cols + 1):
+        x = int(c * cell_w)
+        cv2.line(debug, (x, 0), (x, h), (0, 255, 0), 1)
+    for r in range(rows):
+        for c in range(cols):
+            cy = int((r + 0.5) * cell_h)
+            cx = int((c + 0.5) * cell_w)
+            cv2.circle(debug, (cx, cy), 4, (0, 0, 255), -1)
+
+    cv2.imwrite(filename, debug)
+
+
 def is_game_over(img):
     """
     게임 오버 오버레이(Play Again 화면) 감지.

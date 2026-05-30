@@ -9,7 +9,7 @@ Color Tiles 자동 플레이 봇.
 import json
 import time
 
-from vision import get_frame_and_board, print_board, auto_detect_board, capture, learn_palette, is_game_over, ROWS, COLS
+from vision import get_frame_and_board, print_board, auto_detect_board, capture, learn_palette, is_game_over, save_debug_image, ROWS, COLS
 from board import color_counts, is_clear, tile_count
 from solver import best_click, tiles_gained
 from control import click_cell
@@ -42,7 +42,9 @@ def fresh_config():
 
     img = capture(detected)
     config["palette"] = learn_palette(img, ROWS, COLS)
+    save_debug_image(img, ROWS, COLS, "debug.png")
     print(f"  팔레트: {len(config['palette'])}색 학습 완료")
+    print(f"  debug.png 저장 — 그리드 정렬 확인 후 진행하세요")
 
     save_config(config)
     return config
