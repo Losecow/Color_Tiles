@@ -15,7 +15,9 @@ from solver import best_click, tiles_gained
 from control import click_cell
 
 CONFIG_PATH = "config.json"
-CLICK_DELAY = 0.25
+CLICK_DELAY = 0.35  # 초기 대기; 보드 변화 감지 루프로 실제 동기화
+BOARD_WAIT_STEP = 0.15  # 보드 미변화 시 추가 대기 간격
+BOARD_WAIT_MAX = 8       # 최대 추가 대기 횟수 (최대 1.2s 추가)
 START_DELAY = 3
 
 
@@ -74,9 +76,8 @@ def run():
     start = time.time()
 
     try:
+        img, board = get_frame_and_board(config)
         while True:
-            img, board = get_frame_and_board(config)
-
             if is_game_over(img):
                 elapsed = time.time() - start
                 print(f"\n[게임 오버] 점수: {score} | 클릭: {clicks} | 경과: {elapsed:.1f}s")
@@ -93,6 +94,7 @@ def run():
             if click is None:
                 print("  유효 후보 없음 — 0.5s 대기 후 재인식")
                 time.sleep(0.5)
+                img, board = get_frame_and_board(config)
                 continue
 
             r, c = click
@@ -104,11 +106,19 @@ def run():
             print(f"  [{elapsed:5.1f}s] 클릭 ({r:2d},{c:2d}) +{gained:2d}점 → 누적 {score:3d}점"
                   f" | 잔여 {tile_count(board) - gained}개")
 
+            prev_tile_count = tile_count(board)
             sx, sy = __import__('control').cell_to_screen(bbox, rows, cols, r, c, scale_x, scale_y)
             print(f"         → 화면 좌표 ({sx}, {sy}) 클릭")
             click_cell(bbox, rows, cols, r, c, scale_x, scale_y)
             clicks += 1
             time.sleep(CLICK_DELAY)
+
+            # 보드가 실제로 바뀔 때까지 대기 (팬텀 클릭 방지)
+            for _ in range(BOARD_WAIT_MAX):
+                img, board = get_frame_and_board(config)
+                if tile_count(board) != prev_tile_count or is_game_over(img):
+                    break
+                time.sleep(BOARD_WAIT_STEP)
 
     except KeyboardInterrupt:
         elapsed = time.time() - start
