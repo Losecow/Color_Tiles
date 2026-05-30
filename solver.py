@@ -168,10 +168,31 @@ def score_candidate(board, r, c, remaining):
     return (isolation, par_risk, -gained, dist_center)
 
 
+def _best_next_isolation(board, remaining):
+    """다음 수에서 달성 가능한 최소 v1 고립도 반환 (루크어헤드용 빠른 버전)."""
+    rows, cols = len(board), len(board[0])
+    best = 9999
+    for r in range(rows):
+        for c in range(cols):
+            if board[r][c] != EMPTY:
+                continue
+            gained_set = tiles_gained(board, r, c)
+            if not gained_set:
+                continue
+            board2 = apply_removal(board, gained_set)
+            iso = estimate_isolation_v1(board2)
+            if iso < best:
+                best = iso
+    return best if best < 9999 else 0
+
+
 def best_click(board, remaining):
     """
     최적 클릭 좌표 (r, c) 반환. 유효 후보 없으면 None.
     remaining: {color: 잔여 수} — 매 클릭 후 갱신된 값을 전달할 것.
+
+    정렬 키: (iso_v2, next_iso_v1, parity_risk, -gained, dist_center)
+    iso_v2 동점 후보에 대해 1수 루크어헤드로 타이브레이킹.
     """
     rows, cols = len(board), len(board[0])
     candidates = []
@@ -186,5 +207,25 @@ def best_click(board, remaining):
     if not candidates:
         return None
     candidates.sort()
-    _, r, c = candidates[0]
-    return r, c
+
+    # iso_v2 동점 그룹(최상위)에만 루크어헤드 적용
+    best_iso = candidates[0][0][0]
+    tied = [(key, r, c) for key, r, c in candidates if key[0] == best_iso]
+
+    if len(tied) == 1:
+        _, r, c = tied[0]
+        return r, c
+
+    best_combined = None
+    best_rc = None
+    for key, r, c in tied[:8]:
+        gained_set = tiles_gained(board, r, c)
+        board2 = apply_removal(board, gained_set)
+        remaining2 = color_counts(board2)
+        next_iso = _best_next_isolation(board2, remaining2)
+        combined = (key[0], next_iso, key[1], key[2], key[3])
+        if best_combined is None or combined < best_combined:
+            best_combined = combined
+            best_rc = (r, c)
+
+    return best_rc
