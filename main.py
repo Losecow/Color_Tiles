@@ -9,7 +9,7 @@ Color Tiles 자동 플레이 봇.
 import json
 import time
 
-from vision import get_frame_and_board, print_board, auto_detect_board, capture, learn_palette, is_game_over, save_debug_image, ROWS, COLS
+from vision import get_frame_and_board, print_board, capture, learn_palette, is_game_over, save_debug_image, ROWS, COLS
 from board import color_counts, is_clear, tile_count
 from solver import best_click, tiles_gained
 from control import click_cell
@@ -30,27 +30,19 @@ def save_config(config):
 
 
 def fresh_config():
-    """매 실행마다 bbox 재감지 + 팔레트 재학습"""
+    """bbox는 calibrate.py로 설정된 값 사용, 팔레트만 현재 화면으로 재학습"""
     config = load_config()
+    bbox = config.get("bbox", {})
+    if not bbox or bbox.get("x2", 0) - bbox.get("x1", 0) < 100:
+        raise RuntimeError("bbox가 설정되지 않았습니다. 먼저 python calibrate.py 를 실행하세요.")
 
-    print("5초 안에 터미널을 최소화하고 게임 창을 앞으로 가져오세요!")
-    for i in range(5, 0, -1):
-        print(f"  {i}...", end="\r", flush=True)
-        time.sleep(1)
-    print("게임 보드 감지 중...   ")
-
-    detected = auto_detect_board()
-    if detected is None:
-        raise RuntimeError("게임 보드를 찾지 못했습니다. 게임이 화면에 표시된 상태인지 확인하세요.")
-
-    w = detected["x2"] - detected["x1"]
-    h = detected["y2"] - detected["y1"]
-    print(f"  bbox: {detected}  비율: {w/h:.2f} (목표 1.70)")
-
-    config["bbox"] = detected
-    img = capture(detected)
+    print("팔레트 학습 중...")
+    img = capture(bbox)
     config["palette"] = learn_palette(img, ROWS, COLS)
     save_debug_image(img, ROWS, COLS, "debug.png")
+    w = bbox["x2"] - bbox["x1"]
+    h = bbox["y2"] - bbox["y1"]
+    print(f"  bbox: {bbox}  비율: {w/h:.2f}")
     print(f"  팔레트: {len(config['palette'])}색 / debug.png 저장됨")
 
     save_config(config)
