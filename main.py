@@ -39,7 +39,7 @@ def fresh_config():
     print("팔레트 학습 중...")
     img = capture(bbox)
     config["palette"] = learn_palette(img, ROWS, COLS)
-    save_debug_image(img, ROWS, COLS, "debug.png")
+    save_debug_image(img, config, "debug.png")
     w = bbox["x2"] - bbox["x1"]
     h = bbox["y2"] - bbox["y1"]
     print(f"  bbox: {bbox}  비율: {w/h:.2f}")

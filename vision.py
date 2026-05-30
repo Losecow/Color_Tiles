@@ -7,73 +7,14 @@ import cv2
 import mss
 
 EMPTY = 0
-ROWS = 10
-COLS = 17
+ROWS = 15
+COLS = 23
 BG_SAT_THRESHOLD = 40  # HSV 채도 이하면 빈칸(체크무늬 배경)
 
 
 def load_config(path="config.json"):
     with open(path) as f:
         return json.load(f)
-
-
-def full_screenshot():
-    """전체 화면 캡처 → BGR numpy 배열 + mss monitor 정보"""
-    with mss.MSS() as sct:
-        mon = sct.monitors[1]
-        shot = sct.grab(mon)
-        img = np.array(shot)
-        return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR), mon
-
-
-def auto_detect_board(rows=ROWS, cols=COLS, padding=4):
-    """
-    전체 화면에서 게임 보드 bbox 자동 감지.
-    1) 타일 크기(≥1500px²) 이상 블롭만 유지 → 터미널 텍스트 제거
-    2) 행/열 밀도 투영 → 가장 밀집된 연속 구간을 게임판 경계로 선택
-    """
-    img, _ = full_screenshot()
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    sat_mask = (hsv[:, :, 1] > 50).astype(np.uint8)
-
-    # 터미널 텍스트·소아이콘 제거 (타일 최소 ~32×32px = 1000px²)
-    n, labels, stats, _ = cv2.connectedComponentsWithStats(sat_mask)
-    tile_mask = np.zeros_like(sat_mask)
-    for i in range(1, n):
-        if int(stats[i, cv2.CC_STAT_AREA]) >= 1000:
-            tile_mask[labels == i] = 1
-
-    if tile_mask.sum() == 0:
-        return None
-
-    # 행/열 밀도
-    row_dens = tile_mask.mean(axis=1)
-    col_dens = tile_mask.mean(axis=0)
-    thr = max(row_dens.max(), col_dens.max()) * 0.2
-
-    def largest_run(dens, threshold):
-        """밀도가 threshold 이상인 가장 긴 연속 구간의 (start, end) 반환"""
-        active = np.where(dens > threshold)[0]
-        if len(active) == 0:
-            return 0, 0
-        runs, start, prev = [], active[0], active[0]
-        for idx in active[1:]:
-            if idx - prev > 8:
-                runs.append((start, prev))
-                start = idx
-            prev = idx
-        runs.append((start, prev))
-        return max(runs, key=lambda r: r[1] - r[0])
-
-    y1, y2 = largest_run(row_dens, thr)
-    x1, x2 = largest_run(col_dens, thr)
-
-    return {
-        "x1": max(0, int(x1) - padding),
-        "y1": max(0, int(y1) - padding),
-        "x2": int(x2) + padding,
-        "y2": int(y2) + padding,
-    }
 
 
 def capture(bbox):
@@ -111,14 +52,23 @@ def bgr_saturation(bgr):
     return int(hsv[1])
 
 
-def learn_palette(img, rows=ROWS, cols=COLS, n_clusters=14):
-    """셀 중앙 패치 평균색 → K-Means 군집화로 색 팔레트 생성"""
-    samples = []
+def learn_palette(img, rows=ROWS, cols=COLS, n_clusters=12):
+    """
+    고채도 타일 셀만 샘플링해 K-Means 팔레트 생성.
+    배경(빈칸) 색은 포함하지 않아 팔레트 오염 방지.
+    """
+    tile_samples = []
     for r in range(rows):
         for c in range(cols):
             bgr = cell_mean_bgr(img, r, c, rows, cols)
-            samples.append(bgr)
-    samples = np.array(samples, dtype=np.float32)
+            if bgr_saturation(bgr) >= 50:
+                tile_samples.append(bgr)
+
+    if len(tile_samples) < n_clusters:
+        tile_samples = [cell_mean_bgr(img, r, c, rows, cols)
+                        for r in range(rows) for c in range(cols)]
+
+    samples = np.array(tile_samples, dtype=np.float32)
     k = min(n_clusters, len(samples))
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
     _, _, centers = cv2.kmeans(samples, k, None, criteria, 10, cv2.KMEANS_PP_CENTERS)
@@ -126,13 +76,9 @@ def learn_palette(img, rows=ROWS, cols=COLS, n_clusters=14):
 
 
 def recognize_board(img, config):
-    """
-    캡처 이미지 → 2D 보드 배열.
-    EMPTY(0) 또는 색 ID(1-based).
-    """
+    """캡처 이미지 → 2D 보드 배열. EMPTY(0) 또는 색 ID(1-based)."""
     rows, cols = config["rows"], config["cols"]
     palette = config["palette"]
-
     board = []
     for r in range(rows):
         row = []
@@ -141,14 +87,20 @@ def recognize_board(img, config):
             if bgr_saturation(bgr) < BG_SAT_THRESHOLD:
                 row.append(EMPTY)
             else:
-                row.append(nearest_color_id(bgr, palette) + 1)  # 1-based
+                row.append(nearest_color_id(bgr, palette) + 1)
         board.append(row)
     return board
 
 
-def save_debug_image(img, rows, cols, filename="debug.png"):
-    """감지된 그리드를 오버레이한 디버그 이미지 저장"""
+def save_debug_image(img, config, filename="debug.png"):
+    """
+    그리드 + 색 인식 결과 오버레이 이미지 저장.
+    빈칸=회색 점, 타일=팔레트 색상 점.
+    """
     debug = img.copy()
+    rows = config.get("rows", ROWS)
+    cols = config.get("cols", COLS)
+    palette = config.get("palette", [])
     h, w = img.shape[:2]
     cell_h = h / rows
     cell_w = w / cols
@@ -159,20 +111,27 @@ def save_debug_image(img, rows, cols, filename="debug.png"):
     for c in range(cols + 1):
         x = int(c * cell_w)
         cv2.line(debug, (x, 0), (x, h), (0, 255, 0), 1)
+
     for r in range(rows):
         for c in range(cols):
             cy = int((r + 0.5) * cell_h)
             cx = int((c + 0.5) * cell_w)
-            cv2.circle(debug, (cx, cy), 4, (0, 0, 255), -1)
+            bgr = cell_mean_bgr(img, r, c, rows, cols)
+            if bgr_saturation(bgr) < BG_SAT_THRESHOLD:
+                cv2.circle(debug, (cx, cy), 3, (160, 160, 160), -1)
+            elif palette:
+                pid = nearest_color_id(bgr, palette)
+                dot_color = tuple(int(v) for v in palette[pid])
+                cv2.circle(debug, (cx, cy), 6, dot_color, -1)
+                cv2.circle(debug, (cx, cy), 6, (0, 0, 0), 1)
+            else:
+                cv2.circle(debug, (cx, cy), 4, (0, 0, 255), -1)
 
     cv2.imwrite(filename, debug)
 
 
 def is_game_over(img):
-    """
-    게임 오버 오버레이(Play Again 화면) 감지.
-    중앙 영역에 밝고 채도 낮은 픽셀이 30% 이상이면 오버레이로 판단.
-    """
+    """게임 오버 오버레이(Play Again 화면) 감지."""
     h, w = img.shape[:2]
     cy1, cy2 = int(h * 0.35), int(h * 0.65)
     cx1, cx2 = int(w * 0.25), int(w * 0.75)
