@@ -52,12 +52,48 @@ def tiles_gained(board, r, c):
 # ──────────────────────────────────────────────
 
 def estimate_isolation_v1(board_after):
-    """
-    v1: 색별 잔여 개수가 홀수면 +1 페널티.
-    언젠가 1개가 고립될 가능성을 단순 추정.
-    """
+    """v1: 색별 잔여 개수가 홀수면 +1 페널티."""
     counts = color_counts(board_after)
     return sum(1 for cnt in counts.values() if cnt % 2 != 0)
+
+
+def _reachable_same_color(board, tr, tc):
+    """
+    타일 (tr,tc)가 어떤 빈칸을 통해서든 같은 색 타일을 만날 수 있으면 True.
+    각 빈칸에서 4방향으로 봤을 때 (tr,tc)와 같은 색이 2개 이상 보이는 경우 확인.
+    """
+    color = board[tr][tc]
+    rows, cols = len(board), len(board[0])
+    for r in range(rows):
+        for c in range(cols):
+            if board[r][c] != EMPTY:
+                continue
+            same = [pos for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]
+                    for col, pos in [first_tile_in_dir(board, r, c, dr, dc)]
+                    if col == color]
+            if len(same) >= 2:
+                return True
+    return False
+
+
+def estimate_isolation_v2(board_after):
+    """
+    v2: 실제로 어떤 빈칸을 통해서도 같은 색과 만날 수 없는 타일 수 카운트.
+    v1보다 정확하지만 느림 — 후보 평가에만 사용.
+    """
+    isolated = 0
+    rows, cols = len(board_after), len(board_after[0])
+    checked = {}
+    for r in range(rows):
+        for c in range(cols):
+            color = board_after[r][c]
+            if color == EMPTY:
+                continue
+            if color not in checked:
+                checked[color] = _reachable_same_color(board_after, r, c)
+            if not checked[color]:
+                isolated += 1
+    return isolated
 
 
 # ──────────────────────────────────────────────
@@ -123,7 +159,7 @@ def score_candidate(board, r, c, remaining):
         color = board[pos[0]][pos[1]]
         removed_colors_k[color] = removed_colors_k.get(color, 0) + 1
 
-    isolation = estimate_isolation_v1(board_after)
+    isolation = estimate_isolation_v2(board_after)
     par_risk = calc_parity_risk(board_after, removed_colors_k, remaining)
 
     rows, cols = len(board), len(board[0])
