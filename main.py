@@ -9,7 +9,7 @@ Color Tiles 자동 플레이 봇.
 import json
 import time
 
-from vision import get_frame_and_board, print_board, auto_detect_board, capture, learn_palette, ROWS, COLS
+from vision import get_frame_and_board, print_board, auto_detect_board, capture, learn_palette, is_game_over, ROWS, COLS
 from board import color_counts, is_clear, tile_count
 from solver import best_click, tiles_gained
 from control import click_cell
@@ -75,6 +75,11 @@ def run():
     try:
         while True:
             img, board = get_frame_and_board(config)
+
+            if is_game_over(img):
+                elapsed = time.time() - start
+                print(f"\n[게임 오버] 점수: {score} | 클릭: {clicks} | 경과: {elapsed:.1f}s")
+                break
 
             if is_clear(board):
                 elapsed = time.time() - start

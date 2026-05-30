@@ -152,6 +152,20 @@ def recognize_board(img, config):
     return board
 
 
+def is_game_over(img):
+    """
+    게임 오버 오버레이(Play Again 화면) 감지.
+    중앙 영역에 밝고 채도 낮은 픽셀이 30% 이상이면 오버레이로 판단.
+    """
+    h, w = img.shape[:2]
+    cy1, cy2 = int(h * 0.35), int(h * 0.65)
+    cx1, cx2 = int(w * 0.25), int(w * 0.75)
+    center = img[cy1:cy2, cx1:cx2]
+    hsv = cv2.cvtColor(center, cv2.COLOR_BGR2HSV)
+    bright_low_sat = np.mean((hsv[:, :, 1] < 30) & (hsv[:, :, 2] > 180))
+    return bool(bright_low_sat > 0.3)
+
+
 def print_board(board):
     """콘솔 디버그 출력 (빈칸='.', 색=A-Z)"""
     symbols = ".ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
