@@ -11,7 +11,7 @@ CONFIG_PATH = "config.json"
 
 
 def detect_scale():
-    with __import__("mss").mss() as sct:
+    with __import__("mss").MSS() as sct:
         mon = sct.monitors[1]
         cap_w, cap_h = mon["width"], mon["height"]
     screen_w, screen_h = pyautogui.size()

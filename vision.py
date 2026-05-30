@@ -19,7 +19,7 @@ def load_config(path="config.json"):
 
 def full_screenshot():
     """전체 화면 캡처 → BGR numpy 배열 + mss monitor 정보"""
-    with mss.mss() as sct:
+    with mss.MSS() as sct:
         mon = sct.monitors[1]
         shot = sct.grab(mon)
         img = np.array(shot)
@@ -62,7 +62,7 @@ def auto_detect_board(padding=6):
 
 def capture(bbox):
     """지정 영역 캡처 → BGR numpy 배열"""
-    with mss.mss() as sct:
+    with mss.MSS() as sct:
         monitor = {
             "left": bbox["x1"], "top": bbox["y1"],
             "width": bbox["x2"] - bbox["x1"],
