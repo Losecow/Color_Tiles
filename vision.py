@@ -7,12 +7,57 @@ import cv2
 import mss
 
 EMPTY = 0
+ROWS = 10
+COLS = 17
 BG_SAT_THRESHOLD = 40  # HSV 채도 이하면 빈칸(체크무늬 배경)
 
 
 def load_config(path="config.json"):
     with open(path) as f:
         return json.load(f)
+
+
+def full_screenshot():
+    """전체 화면 캡처 → BGR numpy 배열 + mss monitor 정보"""
+    with mss.mss() as sct:
+        mon = sct.monitors[1]
+        shot = sct.grab(mon)
+        img = np.array(shot)
+        return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR), mon
+
+
+def auto_detect_board(padding=6):
+    """
+    전체 화면에서 게임 보드 bbox 자동 감지.
+    채도 높은(타일) 픽셀 밀집 영역의 최대 연결 컴포넌트를 찾는다.
+    반환: {"x1","y1","x2","y2"} (물리 픽셀 기준) 또는 None
+    """
+    img, _ = full_screenshot()
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    sat_mask = (hsv[:, :, 1] > 50).astype(np.uint8)
+
+    # 타일들을 이어붙여 보드 영역으로 만들기
+    kernel = np.ones((25, 25), np.uint8)
+    dilated = cv2.dilate(sat_mask, kernel, iterations=2)
+
+    num_labels, _, stats, _ = cv2.connectedComponentsWithStats(dilated)
+    if num_labels < 2:
+        return None
+
+    # 배경(0) 제외하고 가장 큰 영역
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    largest = int(np.argmax(areas)) + 1
+    x = int(stats[largest, cv2.CC_STAT_LEFT])
+    y = int(stats[largest, cv2.CC_STAT_TOP])
+    w = int(stats[largest, cv2.CC_STAT_WIDTH])
+    h = int(stats[largest, cv2.CC_STAT_HEIGHT])
+
+    return {
+        "x1": max(0, x - padding),
+        "y1": max(0, y - padding),
+        "x2": x + w + padding,
+        "y2": y + h + padding,
+    }
 
 
 def capture(bbox):
@@ -48,6 +93,20 @@ def bgr_saturation(bgr):
     pixel = np.uint8([[bgr]])
     hsv = cv2.cvtColor(pixel, cv2.COLOR_BGR2HSV)[0][0]
     return int(hsv[1])
+
+
+def learn_palette(img, rows=ROWS, cols=COLS, n_clusters=14):
+    """셀 중앙 패치 평균색 → K-Means 군집화로 색 팔레트 생성"""
+    samples = []
+    for r in range(rows):
+        for c in range(cols):
+            bgr = cell_mean_bgr(img, r, c, rows, cols)
+            samples.append(bgr)
+    samples = np.array(samples, dtype=np.float32)
+    k = min(n_clusters, len(samples))
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
+    _, _, centers = cv2.kmeans(samples, k, None, criteria, 10, cv2.KMEANS_PP_CENTERS)
+    return centers.astype(int).tolist()
 
 
 def recognize_board(img, config):

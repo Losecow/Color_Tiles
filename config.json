@@ -1,7 +1,7 @@
 {
   "bbox": {"x1": 0, "y1": 0, "x2": 0, "y2": 0},
-  "rows": 0,
-  "cols": 0,
+  "rows": 10,
+  "cols": 17,
   "palette": [],
   "bg_color": [200, 200, 200],
   "scale_x": 1.0,

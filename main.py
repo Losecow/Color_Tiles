@@ -2,23 +2,21 @@
 Color Tiles 자동 플레이 봇.
 
 사용법:
-  1. python calibrate.py   # 최초 1회 보정
-  2. python main.py        # 자동 플레이 시작
+  python main.py   # 게임이 화면에 열려 있으면 바로 실행
 
 중단: Ctrl+C 또는 마우스를 화면 좌상단으로 이동 (pyautogui FAILSAFE).
 """
 import json
 import time
-import sys
 
-from vision import get_frame_and_board, print_board
-from board import color_counts, apply_removal, is_clear, tile_count
+from vision import get_frame_and_board, print_board, auto_detect_board, capture, learn_palette, ROWS, COLS
+from board import color_counts, is_clear, tile_count
 from solver import best_click, tiles_gained
 from control import click_cell
 
 CONFIG_PATH = "config.json"
-CLICK_DELAY = 0.25   # 클릭 간 딜레이 (게임 애니메이션 대기, 초)
-START_DELAY = 3      # 봇 시작 전 게임 창으로 이동할 시간
+CLICK_DELAY = 0.25
+START_DELAY = 3
 
 
 def load_config():
@@ -26,8 +24,30 @@ def load_config():
         return json.load(f)
 
 
-def run():
+def save_config(config):
+    with open(CONFIG_PATH, "w") as f:
+        json.dump(config, f, indent=2)
+
+
+def ensure_config():
+    """bbox가 미설정(0,0,0,0)이면 자동 감지 후 저장"""
     config = load_config()
+    bbox = config["bbox"]
+    if bbox["x1"] == 0 and bbox["x2"] == 0:
+        print("게임 보드 자동 감지 중...")
+        detected = auto_detect_board()
+        if detected is None:
+            raise RuntimeError("게임 보드를 찾지 못했습니다. 게임이 화면에 표시된 상태인지 확인하세요.")
+        config["bbox"] = detected
+        img = capture(detected)
+        config["palette"] = learn_palette(img, ROWS, COLS)
+        save_config(config)
+        print(f"  감지 완료: {detected}")
+    return config
+
+
+def run():
+    config = ensure_config()
     bbox = config["bbox"]
     rows, cols = config["rows"], config["cols"]
     scale_x = config.get("scale_x", 1.0)
