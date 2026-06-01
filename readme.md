@@ -43,11 +43,20 @@
 
 ---
 
-## 3. 의존성
+## 3. 의존성 및 실행
 
 ```bash
+# 의존성 설치
 pip install mss pyautogui numpy opencv-python
+
+# 보정 (첫 실행 또는 화면 배치가 바뀐 경우)
+python calibrate.py
+
+# 봇 실행 (게임을 브라우저에서 먼저 열어둘 것)
+python main.py
 ```
+
+중단: `Ctrl+C` 또는 마우스를 화면 **좌상단**으로 이동 (pyautogui FAILSAFE).
 
 - `mss`: 빠른 화면 캡처
 - `pyautogui`: 마우스 제어
